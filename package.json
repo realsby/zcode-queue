@@ -1,0 +1,11 @@
+{
+  "name": "zcode-queue",
+  "version": "0.1.0",
+  "description": "A file queue that lets Claude Code or a script hand tasks to a ZCode Automation",
+  "type": "module",
+  "bin": { "zq": "zq.mjs" },
+  "scripts": { "test": "node --test" },
+  "engines": { "node": ">=20" },
+  "license": "MIT",
+  "private": true
+}

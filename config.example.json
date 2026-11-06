@@ -1,0 +1,5 @@
+{
+  "allowed_roots": ["~/projects"],
+  "max_parallel": 2,
+  "stale_minutes": 90
+}

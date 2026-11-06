@@ -1,0 +1,8 @@
+# Queue data, if ZQ_ROOT ever points here
+inbox/
+working/
+outbox/
+config.json
+.claim.lock
+node_modules/
+.DS_Store
