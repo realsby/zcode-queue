@@ -25,6 +25,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
+// `zq status | head` closes the pipe early: that is not an error.
+process.stdout.on('error', (e) => process.exit(e.code === 'EPIPE' ? 0 : 1));
+
 const HOME = os.homedir();
 const SCRIPT = realOrResolve(fileURLToPath(import.meta.url));
 const SCRIPT_DIR = path.dirname(SCRIPT);
