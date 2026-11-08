@@ -116,8 +116,9 @@ contain all the context it needs: ZCode does not see this conversation.
 
 ## Token balance
 
-The ZCode desktop app checks its token balance every few minutes and writes it
-to its own log (`~/.zcode/v2/logs/<date>.log`, the `billing/balance` lines).
+Whenever the ZCode desktop app checks its token balance (for example when you
+open its usage view), it writes it to its own log
+(`~/.zcode/v2/logs/<date>.log`, the `billing/balance` lines).
 `zq balance` reads the newest entry, with no network call and no credentials:
 
 ```
@@ -128,7 +129,8 @@ $ zq balance
 
 `--json` prints `{"at", "remaining", "total", "percent", "plans"}` for scripts:
 a producer can stop submitting tasks when the balance gets low. The numbers are
-only as fresh as the app's last check, and only while the app runs.
+only as fresh as the app's last check (`at`), which can be hours old: open the
+usage view to refresh it.
 `ZQ_ZCODE_LOGS` selects another log folder. Exit code `2` means no balance was
 found (app not running, or not signed in).
 

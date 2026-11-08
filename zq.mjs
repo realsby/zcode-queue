@@ -38,7 +38,8 @@ const INBOX = path.join(ROOT, 'inbox');
 const WORKING = path.join(ROOT, 'working');
 const OUTBOX = path.join(ROOT, 'outbox');
 const MODES = ['read-only', 'edit'];
-// The ZCode app logs its token balance ("billing/balance") here every few minutes while it runs.
+// The ZCode app logs its token balance ("billing/balance") here whenever it checks it, for example
+// when you open its usage view.
 const ZCODE_LOGS = path.resolve(expandHome(process.env.ZQ_ZCODE_LOGS || path.join(HOME, '.zcode', 'v2', 'logs')));
 const DEFAULTS = { allowed_roots: [], max_parallel: 2, stale_minutes: 90 };
 
