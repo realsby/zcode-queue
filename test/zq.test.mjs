@@ -149,3 +149,23 @@ test('queue folders are private', () => {
     assert.equal(fs.statSync(path.join(q.root, d)).mode & 0o777, 0o700, `${d || 'root'} should be 700`);
   }
 });
+
+test('balance reads the newest balance the ZCode app logged', () => {
+  const logs = fs.mkdtempSync(path.join(os.tmpdir(), 'zq-logs-'));
+  const entry = (time, remaining) =>
+    `[${time}] [info] [usage-stats] billing/balance request done ` +
+    JSON.stringify({ balances: [{ total_units: 500000000, remaining_units: remaining }],
+      payload: { data: { plans: [{ name: 'WEEKEND', ends_at: 1794186000 }] } } });
+  fs.writeFileSync(path.join(logs, '2026-11-07.log'), entry('2026-11-07 22:00:00.000', 150000000) + '\n');
+  fs.writeFileSync(path.join(logs, '2026-11-08.log'),
+    [entry('2026-11-08 13:00:00.000', 16000000), '[2026-11-08 13:05:00.000] other line', '[x] billing/balance {cut off'].join('\n'));
+  const run = (dir) => spawnSync(process.execPath, [ZQ, 'balance', '--json'],
+    { env: { ...process.env, ZQ_ZCODE_LOGS: dir }, encoding: 'utf8' });
+  const r = run(logs);
+  assert.equal(r.status, 0, r.stderr);
+  const b = JSON.parse(r.stdout);
+  assert.equal(b.percent, 3.2);
+  assert.equal(b.at, '2026-11-08 13:00:00');
+  assert.equal(b.plans[0].ends_at, '2026-11-09T01:00:00.000Z');
+  assert.equal(run(path.join(logs, 'missing')).status, 2);
+});

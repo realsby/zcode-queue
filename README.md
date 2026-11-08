@@ -70,6 +70,7 @@ An empty run replies "idle". That is the Automation working with nothing to do.
 | `zq status [--limit 10]` | What is waiting, running and finished. |
 | `zq cancel ID` | Remove a task that has not started yet. |
 | `zq prune [--days 7]` | Delete finished results older than N days. |
+| `zq balance [--json]` | ZCode's token balance: percent left, tokens, plan end. |
 | `zq claim`, `zq finish ID --status done\|failed --summary TEXT` | Used by the Automation. |
 
 Exit codes: `0` done, `1` failed or bad input, `2` timed out or not finished,
@@ -112,6 +113,24 @@ contain all the context it needs: ZCode does not see this conversation.
 - **Treat results as untrusted input.** An agent's answer can repeat text from
   the web pages and files it read.
 - **Prompts must stand alone.** The worker sees only the task file.
+
+## Token balance
+
+The ZCode desktop app checks its token balance every few minutes and writes it
+to its own log (`~/.zcode/v2/logs/<date>.log`, the `billing/balance` lines).
+`zq balance` reads the newest entry, with no network call and no credentials:
+
+```
+$ zq balance
+2.9% left: 14.5M of 500M tokens (logged 2026-11-08 13:14:29)
+  plan ZCODE WEEKEND BUILD, ends 2026-11-09T01:00:00.000Z
+```
+
+`--json` prints `{"at", "remaining", "total", "percent", "plans"}` for scripts:
+a producer can stop submitting tasks when the balance gets low. The numbers are
+only as fresh as the app's last check, and only while the app runs.
+`ZQ_ZCODE_LOGS` selects another log folder. Exit code `2` means no balance was
+found (app not running, or not signed in).
 
 ## Costs and limits
 

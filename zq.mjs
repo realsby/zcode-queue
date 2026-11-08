@@ -6,6 +6,7 @@
 //   Producer:  zq submit --cwd DIR [--mode read-only|edit] [--title T] (-m TEXT | --file F | stdin)  -> id
 //              zq wait ID [--timeout SEC] [--interval SEC]
 //              zq result ID | zq status [--limit N] | zq cancel ID | zq prune [--days N]
+//              zq balance [--json]                       ZCode's token balance, read from the app's log
 //   Worker:    zq claim                                  JSON with up to max_parallel claimed tasks
 //              zq finish ID --status done|failed --summary TEXT
 //
@@ -37,6 +38,8 @@ const INBOX = path.join(ROOT, 'inbox');
 const WORKING = path.join(ROOT, 'working');
 const OUTBOX = path.join(ROOT, 'outbox');
 const MODES = ['read-only', 'edit'];
+// The ZCode app logs its token balance ("billing/balance") here every few minutes while it runs.
+const ZCODE_LOGS = path.resolve(expandHome(process.env.ZQ_ZCODE_LOGS || path.join(HOME, '.zcode', 'v2', 'logs')));
 const DEFAULTS = { allowed_roots: [], max_parallel: 2, stale_minutes: 90 };
 
 function expandHome(p) {
@@ -473,6 +476,53 @@ function prune(args) {
   process.stdout.write(`pruned ${removed} finished task(s) older than ${days} day(s)\n`);
 }
 
+// The newest balance the ZCode app logged: no network call, no credentials. Log files are named
+// by date (YYYY-MM-DD.log), so the newest sorts last.
+function readBalance() {
+  let files;
+  try {
+    files = fs.readdirSync(ZCODE_LOGS).filter((f) => f.endsWith('.log')).sort().reverse().slice(0, 3);
+  } catch {
+    return null;
+  }
+  for (const f of files) {
+    const lines = fs.readFileSync(path.join(ZCODE_LOGS, f), 'utf8').split('\n');
+    for (const line of lines.reverse()) {
+      if (!line.includes('billing/balance') || !line.includes('{')) continue;
+      try {
+        const data = JSON.parse(line.slice(line.indexOf('{')));
+        const bal = data.balances || [];
+        if (!bal.length) continue;
+        const total = bal.reduce((n, b) => n + (b.total_units || 0), 0);
+        const remaining = bal.reduce((n, b) => n + (b.remaining_units || 0), 0);
+        return {
+          at: line.match(/^\[([0-9-]+ [0-9:]+)/)?.[1] ?? null,
+          remaining,
+          total,
+          percent: total ? Math.floor((remaining * 1000) / total) / 10 : null,
+          plans: (data.payload?.data?.plans || []).map((p) => ({
+            name: p.name,
+            ends_at: p.ends_at ? new Date(p.ends_at * 1000).toISOString() : null,
+          })),
+        };
+      } catch {
+        // a cut-off line: try the one before
+      }
+    }
+  }
+  return null;
+}
+
+function balance(args) {
+  const b = readBalance();
+  if (!b) die(`no token balance in ${ZCODE_LOGS}: is the ZCode app running and signed in?`, 2);
+  if (args.json) return process.stdout.write(`${JSON.stringify(b)}\n`);
+  const plans = b.plans.map((p) => `\n  plan ${p.name}${p.ends_at ? `, ends ${p.ends_at}` : ''}`).join('');
+  process.stdout.write(
+    `${b.percent}% left: ${(b.remaining / 1e6).toFixed(1)}M of ${(b.total / 1e6).toFixed(0)}M tokens (logged ${b.at})${plans}\n`,
+  );
+}
+
 const USAGE = `usage: zq <command> [options]
 
 setup     init --allow DIR [--allow DIR ...]   create the queue (${ROOT}) and its config
@@ -481,14 +531,15 @@ producer  submit --cwd DIR [--mode read-only|edit] [--title T] (-m TEXT | --file
           wait ID [--timeout SEC] [--interval SEC]
           result ID | status [--limit N] | cancel ID | prune [--days N]
 worker    claim | finish ID --status done|failed --summary TEXT
+zcode     balance [--json]                     token balance from the ZCode app's log (${ZCODE_LOGS})
 
-Set ZQ_ROOT to use another queue folder.
+Set ZQ_ROOT to use another queue folder, ZQ_ZCODE_LOGS another ZCode log folder.
 `;
 
 const args = parseArgs(process.argv.slice(2));
 const cfg = loadConfig();
 const cmd = args._[0];
-const commands = { init, automation, submit, claim, finish, wait, result, status, cancel, prune };
+const commands = { init, automation, submit, claim, finish, wait, result, status, cancel, prune, balance };
 if (!commands[cmd]) {
   process.stdout.write(USAGE);
   process.exit(cmd && cmd !== 'help' ? 1 : 0);
