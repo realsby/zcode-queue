@@ -87,10 +87,18 @@ change files or run commands that change state.
   and the folder holding `zq.mjs` are never allowed, so a task cannot rewrite
   the queue, other tasks, or the script.
 - `max_parallel` (2): how many tasks run at the same time. `zq claim` takes a
-  lock, so overlapping Automation runs cannot exceed it together.
+  lock, so overlapping Automation runs cannot exceed it together. ZCode allows a
+  few concurrent requests per user (3 on our plan): 4 parallel tasks gave "user
+  concurrency limit exceeded", 3 ran without an error. 3 leaves no room for your
+  own ZCode use while the queue is busy.
 - `stale_minutes` (90): a claimed task with no result after this time is marked
   failed, which frees its slot. If it finishes later, its result replaces the
-  failure and gets a `note` saying it finished late.
+  failure and gets a `note` saying it finished late. Raise it for long tasks.
+
+An Automation that runs every minute fills a freed slot within a minute; every run
+is one model call, even when the queue is empty. A task that hangs in `working/`
+after its work is done holds a slot until it goes stale; `zq finish ID --status
+failed --summary TEXT` frees it at once.
 
 ## Using it from Claude Code
 
