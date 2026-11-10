@@ -182,4 +182,9 @@ test('balance reads the newest balance the ZCode app logged', () => {
   const coding = JSON.parse(run(logs).stdout);
   assert.equal(coding.percent, null);
   assert.equal(coding.plan, 'individual-coding-plan');
+
+  // a balance check right after a Coding Plan session is still "unknown", not 0%
+  fs.appendFileSync(path.join(logs, '2026-11-08.log'),
+    '\n[2026-11-08 15:10:00.000] [info] [usage-stats] billing/balance done {"balances":[],"payload":{"data":{"plans":[]}}}');
+  assert.equal(JSON.parse(run(logs).stdout).percent, null);
 });

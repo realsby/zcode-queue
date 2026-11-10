@@ -501,7 +501,9 @@ function readBalance() {
         // No balance means no active Start Plan (one ended): nothing left to spend, unless the
         // app has used the Individual Coding Plan since; its balance is not logged (unknown).
         if (!bal.length) {
-          if (codingAt && at && codingAt > at) {
+          // within the hour, either way round: the app checks the balance between Coding Plan sessions
+          const ms = (t) => Date.parse(t.replace(' ', 'T'));
+          if (codingAt && at && ms(codingAt) >= ms(at) - 3_600_000) {
             return { at: codingAt, remaining: null, total: null, percent: null, plans: [], plan: 'individual-coding-plan' };
           }
           return { at, remaining: 0, total: 0, percent: 0, plans: [] };
