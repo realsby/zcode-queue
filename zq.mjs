@@ -493,11 +493,13 @@ function readBalance() {
       try {
         const data = JSON.parse(line.slice(line.indexOf('{')));
         const bal = data.balances || [];
-        if (!bal.length) continue;
+        const at = line.match(/^\[([0-9-]+ [0-9:]+)/)?.[1] ?? null;
+        // No balance at all means no active plan (one ended): nothing left to spend.
+        if (!bal.length) return { at, remaining: 0, total: 0, percent: 0, plans: [] };
         const total = bal.reduce((n, b) => n + (b.total_units || 0), 0);
         const remaining = bal.reduce((n, b) => n + (b.remaining_units || 0), 0);
         return {
-          at: line.match(/^\[([0-9-]+ [0-9:]+)/)?.[1] ?? null,
+          at,
           remaining,
           total,
           percent: total ? Math.floor((remaining * 1000) / total) / 10 : null,
@@ -518,6 +520,7 @@ function balance(args) {
   const b = readBalance();
   if (!b) die(`no token balance in ${ZCODE_LOGS}: is the ZCode app running and signed in?`, 2);
   if (args.json) return process.stdout.write(`${JSON.stringify(b)}\n`);
+  if (!b.total) return process.stdout.write(`0% left: no active plan (logged ${b.at})\n`);
   const plans = b.plans.map((p) => `\n  plan ${p.name}${p.ends_at ? `, ends ${p.ends_at}` : ''}`).join('');
   process.stdout.write(
     `${b.percent}% left: ${(b.remaining / 1e6).toFixed(1)}M of ${(b.total / 1e6).toFixed(0)}M tokens (logged ${b.at})${plans}\n`,

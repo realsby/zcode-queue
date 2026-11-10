@@ -168,4 +168,11 @@ test('balance reads the newest balance the ZCode app logged', () => {
   assert.equal(b.at, '2026-11-08 13:00:00');
   assert.equal(b.plans[0].ends_at, '2026-11-09T01:00:00.000Z');
   assert.equal(run(path.join(logs, 'missing')).status, 2);
+
+  // a plan that ended: the app logs an empty balance, which means 0% left
+  fs.appendFileSync(path.join(logs, '2026-11-08.log'),
+    '\n[2026-11-08 14:00:00.000] [info] [usage-stats] billing/balance done {"balances":[],"payload":{"data":{"plans":[]}}}');
+  const ended = JSON.parse(run(logs).stdout);
+  assert.equal(ended.percent, 0);
+  assert.equal(ended.at, '2026-11-08 14:00:00');
 });
