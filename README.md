@@ -142,6 +142,11 @@ usage view to refresh it.
 `ZQ_ZCODE_LOGS` selects another log folder. Exit code `2` means no balance was
 found (app not running, or not signed in).
 
+The balance is the Start Plan's. When it has ended, the app logs an empty balance and
+`zq balance` reports 0%. When the app has used the Individual Coding Plan since, it
+reports `unknown` (`"percent": null`, `"plan": "individual-coding-plan"`): the app
+does not log that plan's balance.
+
 ## Costs and limits
 
 - Every Automation run is a model call, even when the queue is empty: about

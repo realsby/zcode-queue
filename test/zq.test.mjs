@@ -175,4 +175,11 @@ test('balance reads the newest balance the ZCode app logged', () => {
   const ended = JSON.parse(run(logs).stdout);
   assert.equal(ended.percent, 0);
   assert.equal(ended.at, '2026-11-08 14:00:00');
+
+  // the app switched to the Individual Coding Plan after that: its balance is unknown, not 0
+  fs.appendFileSync(path.join(logs, '2026-11-08.log'),
+    '\n[2026-11-08 15:00:00.000] [info] provider runtime headers {"providerId":"account:zai-individual-coding-plan"}');
+  const coding = JSON.parse(run(logs).stdout);
+  assert.equal(coding.percent, null);
+  assert.equal(coding.plan, 'individual-coding-plan');
 });

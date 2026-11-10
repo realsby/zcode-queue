@@ -486,16 +486,26 @@ function readBalance() {
   } catch {
     return null;
   }
+  let codingAt = null; // newest use of the Individual Coding Plan, whose balance the app does not log
   for (const f of files) {
     const lines = fs.readFileSync(path.join(ZCODE_LOGS, f), 'utf8').split('\n');
     for (const line of lines.reverse()) {
+      if (!codingAt && line.includes('"providerId":"account:zai-individual-coding-plan"')) {
+        codingAt = line.match(/^\[([0-9-]+ [0-9:]+)/)?.[1] ?? null;
+      }
       if (!line.includes('billing/balance') || !line.includes('{')) continue;
       try {
         const data = JSON.parse(line.slice(line.indexOf('{')));
         const bal = data.balances || [];
         const at = line.match(/^\[([0-9-]+ [0-9:]+)/)?.[1] ?? null;
-        // No balance at all means no active plan (one ended): nothing left to spend.
-        if (!bal.length) return { at, remaining: 0, total: 0, percent: 0, plans: [] };
+        // No balance means no active Start Plan (one ended): nothing left to spend, unless the
+        // app has used the Individual Coding Plan since; its balance is not logged (unknown).
+        if (!bal.length) {
+          if (codingAt && at && codingAt > at) {
+            return { at: codingAt, remaining: null, total: null, percent: null, plans: [], plan: 'individual-coding-plan' };
+          }
+          return { at, remaining: 0, total: 0, percent: 0, plans: [] };
+        }
         const total = bal.reduce((n, b) => n + (b.total_units || 0), 0);
         const remaining = bal.reduce((n, b) => n + (b.remaining_units || 0), 0);
         return {
@@ -520,6 +530,7 @@ function balance(args) {
   const b = readBalance();
   if (!b) die(`no token balance in ${ZCODE_LOGS}: is the ZCode app running and signed in?`, 2);
   if (args.json) return process.stdout.write(`${JSON.stringify(b)}\n`);
+  if (b.plan) return process.stdout.write(`unknown: the ${b.plan} is in use (seen ${b.at}); the app does not log its balance\n`);
   if (!b.total) return process.stdout.write(`0% left: no active plan (logged ${b.at})\n`);
   const plans = b.plans.map((p) => `\n  plan ${p.name}${p.ends_at ? `, ends ${p.ends_at}` : ''}`).join('');
   process.stdout.write(
