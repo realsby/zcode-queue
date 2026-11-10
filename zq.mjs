@@ -486,13 +486,12 @@ function readBalance() {
   } catch {
     return null;
   }
-  let codingAt = null; // newest use of the Individual Coding Plan, whose balance the app does not log
-  for (const f of files) {
-    const lines = fs.readFileSync(path.join(ZCODE_LOGS, f), 'utf8').split('\n');
-    for (const line of lines.reverse()) {
-      if (!codingAt && line.includes('"providerId":"account:zai-individual-coding-plan"')) {
-        codingAt = line.match(/^\[([0-9-]+ [0-9:]+)/)?.[1] ?? null;
-      }
+  const logs = files.map((f) => fs.readFileSync(path.join(ZCODE_LOGS, f), 'utf8').split('\n').reverse());
+  // newest use of the Individual Coding Plan, whose balance the app does not log
+  const codingLine = logs.flat().find((l) => l.includes('"providerId":"account:zai-individual-coding-plan"'));
+  const codingAt = codingLine?.match(/^\[([0-9-]+ [0-9:]+)/)?.[1] ?? null;
+  for (const lines of logs) {
+    for (const line of lines) {
       if (!line.includes('billing/balance') || !line.includes('{')) continue;
       try {
         const data = JSON.parse(line.slice(line.indexOf('{')));
