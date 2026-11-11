@@ -495,7 +495,14 @@ function readBalance() {
       if (!line.includes('billing/balance') || !line.includes('{')) continue;
       try {
         const data = JSON.parse(line.slice(line.indexOf('{')));
-        const bal = data.balances || [];
+        // A pool past its expiry is gone, even though the last logged line still lists it. The
+        // top-level balances carry no date: it is in payload.data (bucket expires_at, plan ends_at).
+        const inner = data.payload?.data || {};
+        const expiry = new Map();
+        for (const p of inner.plans || []) for (const e of p.entitlements || []) expiry.set(e.entitlement_id, p.ends_at);
+        for (const b of inner.balances || []) if (b.expires_at) expiry.set(b.entitlement_id, b.expires_at);
+        const ends = (b) => b.expires_at || expiry.get(b.entitlement_id);
+        const bal = (data.balances || []).filter((b) => !(ends(b) > 0) || ends(b) * 1000 > Date.now());
         const at = line.match(/^\[([0-9-]+ [0-9:]+)/)?.[1] ?? null;
         // No balance means no active Start Plan (one ended): nothing left to spend, unless the
         // app has used the Individual Coding Plan since; its balance is not logged (unknown).

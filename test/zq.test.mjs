@@ -188,3 +188,28 @@ test('balance reads the newest balance the ZCode app logged', () => {
     '\n[2026-11-08 15:10:00.000] [info] [usage-stats] billing/balance done {"balances":[],"payload":{"data":{"plans":[]}}}');
   assert.equal(JSON.parse(run(logs).stdout).percent, null);
 });
+
+test('balance treats a pool past its expiry as 0% left', () => {
+  const logs = fs.mkdtempSync(path.join(os.tmpdir(), 'zq-logs-'));
+  const entry = (time, expires) =>
+    `[${time}] [info] [usage-stats] billing/balance done ` +
+    JSON.stringify({ balances: [{ total_units: 300000000, remaining_units: 190000000, expires_at: expires }] });
+  const run = () => JSON.parse(spawnSync(process.execPath, [ZQ, 'balance', '--json'],
+    { env: { ...process.env, ZQ_ZCODE_LOGS: logs }, encoding: 'utf8' }).stdout);
+  fs.writeFileSync(path.join(logs, '2026-11-11.log'), entry('2026-11-11 01:22:00.000', 4102444800) + '\n');
+  assert.equal(run().percent, 63.3); // expires in 2100: still counts
+  fs.writeFileSync(path.join(logs, '2026-11-11.log'), entry('2026-11-11 01:22:00.000', 1700000000) + '\n');
+  assert.equal(run().percent, 0); // expired: the tokens left in it are gone
+
+  // the app's real shape: the date is only in payload.data (plan ends_at, bucket expires_at)
+  const nested = (expires) =>
+    '[2026-11-11 01:22:42.002] [info] [usage-stats] billing/balance done ' +
+    JSON.stringify({
+      balances: [{ entitlement_id: 'ent-1', total_units: 300000000, remaining_units: 190000000 }],
+      payload: { data: { plans: [{ name: 'BUILD', ends_at: expires, entitlements: [{ entitlement_id: 'ent-1' }] }] } },
+    });
+  fs.writeFileSync(path.join(logs, '2026-11-11.log'), nested(4102444800) + '\n');
+  assert.equal(run().percent, 63.3);
+  fs.writeFileSync(path.join(logs, '2026-11-11.log'), nested(1700000000) + '\n');
+  assert.equal(run().percent, 0);
+});
