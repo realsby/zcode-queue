@@ -25,6 +25,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 // `zq status | head` closes the pipe early: that is not an error.
 process.stdout.on('error', (e) => process.exit(e.code === 'EPIPE' ? 0 : 1));
@@ -41,6 +42,10 @@ const MODES = ['read-only', 'edit'];
 // The ZCode app logs its token balance ("billing/balance") here whenever it checks it, for example
 // when you open its usage view.
 const ZCODE_LOGS = path.resolve(expandHome(process.env.ZQ_ZCODE_LOGS || path.join(HOME, '.zcode', 'v2', 'logs')));
+// The app's task index holds the Automation and the model it runs on. zq only reads it.
+const ZCODE_DB = path.resolve(
+  expandHome(process.env.ZQ_ZCODE_DB || path.join(HOME, '.zcode', 'v2', 'tasks-index.sqlite')),
+);
 const DEFAULTS = { allowed_roots: [], max_parallel: 2, stale_minutes: 90 };
 
 function expandHome(p) {
@@ -477,9 +482,41 @@ function prune(args) {
   process.stdout.write(`pruned ${removed} finished task(s) older than ${days} day(s)\n`);
 }
 
+// The provider the queue's Automation runs on ("account:zai-start-plan", "account:zai-individual-
+// coding-plan"), read-only from the app's task index; null when that cannot be read (no node:sqlite,
+// no index, no Automation that runs `zq.mjs claim`).
+function automationProvider() {
+  try {
+    if (!fs.existsSync(ZCODE_DB)) return null;
+    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
+    const db = new DatabaseSync(ZCODE_DB, { readOnly: true });
+    try {
+      const row = db
+        .prepare("SELECT model_selection FROM automations WHERE prompt LIKE '%zq.mjs claim%' ORDER BY rowid DESC LIMIT 1")
+        .get();
+      return row ? JSON.parse(row.model_selection)?.providerId ?? null : null;
+    } finally {
+      db.close();
+    }
+  } catch {
+    return null;
+  }
+}
+
+function localStamp(d = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 // The newest balance the ZCode app logged: no network call, no credentials. Log files are named
 // by date (YYYY-MM-DD.log), so the newest sorts last.
 function readBalance() {
+  // The Automation's own model decides which balance applies. On the Coding Plan it is unknown:
+  // the app does not log that plan's balance, and a Start Plan pool (or none) says nothing about it.
+  const provider = automationProvider();
+  if (provider?.includes('individual-coding-plan')) {
+    return { at: localStamp(), remaining: null, total: null, percent: null, plans: [], plan: 'individual-coding-plan' };
+  }
   let files;
   try {
     files = fs.readdirSync(ZCODE_LOGS).filter((f) => f.endsWith('.log')).sort().reverse().slice(0, 3);
@@ -487,8 +524,9 @@ function readBalance() {
     return null;
   }
   const logs = files.map((f) => fs.readFileSync(path.join(ZCODE_LOGS, f), 'utf8').split('\n').reverse());
-  // newest use of the Individual Coding Plan, whose balance the app does not log
-  const codingLine = logs.flat().find((l) => l.includes('"providerId":"account:zai-individual-coding-plan"'));
+  // Without the Automation's model (index unreadable), guess from the log: the newest use of the
+  // Individual Coding Plan, whose balance the app does not log. With it (Start Plan), the pool counts.
+  const codingLine = provider ? null : logs.flat().find((l) => l.includes('"providerId":"account:zai-individual-coding-plan"'));
   const codingAt = codingLine?.match(/^\[([0-9-]+ [0-9:]+)/)?.[1] ?? null;
   const startLine = logs.flat().find((l) => l.includes('"providerId":"account:zai-start-plan"'));
   const startAt = startLine?.match(/^\[([0-9-]+ [0-9:]+)/)?.[1] ?? null;

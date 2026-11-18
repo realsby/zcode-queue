@@ -8,6 +8,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ZQ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'zq.mjs');
+// Never read the real ZCode task index: the balance tests below bring their own.
+process.env.ZQ_ZCODE_DB = path.join(os.tmpdir(), 'zq-no-such-index.sqlite');
 
 // Every test gets its own queue folder and its own allowed work folder.
 function setup({ maxParallel = 2, staleMinutes = 90 } = {}) {
@@ -209,6 +211,38 @@ test('balance ignores a used-up pool once the app runs on the Coding Plan', () =
   // and back to the Start Plan: its balance counts again
   fs.appendFileSync(file, provider('2026-11-18 01:30:00.000', 'zai-start-plan'));
   assert.equal(run().percent, 0);
+});
+
+test("balance follows the Automation's own model in the app's task index", async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zq-index-'));
+  const logs = path.join(dir, 'logs');
+  fs.mkdirSync(logs);
+  // the log says: an empty pool, and the newest model call went to the Start Plan (a chat, say)
+  fs.writeFileSync(path.join(logs, '2026-11-18.log'),
+    '[2026-11-18 13:32:57.000] [info] [usage-stats] billing/balance done {"balances":[],"payload":{"data":{"plans":[]}}}\n' +
+    '[2026-11-18 13:32:58.000] [info] provider runtime headers {"providerId":"account:zai-start-plan"}\n');
+  const index = path.join(dir, 'tasks-index.sqlite');
+  const db = new DatabaseSync(index);
+  db.exec('CREATE TABLE automations (automation_id TEXT, prompt TEXT, model_selection TEXT)');
+  const setModel = (provider) => {
+    db.exec('DELETE FROM automations');
+    db.prepare('INSERT INTO automations VALUES (?, ?, ?)').run('a1', 'Run: node /x/zq.mjs claim',
+      JSON.stringify({ providerId: provider, modelId: 'GLM-5.3-Flash' }));
+  };
+  const run = (env = {}) => JSON.parse(spawnSync(process.execPath, [ZQ, 'balance', '--json'],
+    { env: { ...process.env, ZQ_ZCODE_LOGS: logs, ZQ_ZCODE_DB: index, ...env }, encoding: 'utf8' }).stdout);
+  // the Automation runs on the Coding Plan: unknown, whatever the log says
+  setModel('account:zai-individual-coding-plan');
+  const coding = run();
+  assert.equal(coding.percent, null);
+  assert.equal(coding.plan, 'individual-coding-plan');
+  // on the Start Plan the pool counts: none left
+  setModel('account:zai-start-plan');
+  assert.equal(run().percent, 0);
+  db.close();
+  // no index: back to reading the log alone (newest call went to the Start Plan, so 0%)
+  assert.equal(run({ ZQ_ZCODE_DB: path.join(dir, 'missing.sqlite') }).percent, 0);
 });
 
 test('balance treats a pool past its expiry as 0% left', () => {
