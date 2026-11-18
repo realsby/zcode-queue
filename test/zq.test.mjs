@@ -189,6 +189,28 @@ test('balance reads the newest balance the ZCode app logged', () => {
   assert.equal(JSON.parse(run(logs).stdout).percent, null);
 });
 
+test('balance ignores a used-up pool once the app runs on the Coding Plan', () => {
+  const logs = fs.mkdtempSync(path.join(os.tmpdir(), 'zq-logs-'));
+  const file = path.join(logs, '2026-11-17.log');
+  const run = () => JSON.parse(spawnSync(process.execPath, [ZQ, 'balance', '--json'],
+    { env: { ...process.env, ZQ_ZCODE_LOGS: logs }, encoding: 'utf8' }).stdout);
+  const provider = (time, id) => `[${time}] [info] provider runtime headers {"providerId":"account:${id}"}\n`;
+  // a pool that is still listed (ends in 2100) but has nothing left, used by the Start Plan
+  fs.writeFileSync(file,
+    provider('2026-11-17 23:30:00.000', 'zai-start-plan') +
+    '[2026-11-17 23:40:00.000] [info] [usage-stats] billing/balance done ' +
+    JSON.stringify({ balances: [{ total_units: 300000000, remaining_units: 0, expires_at: 4102444800 }] }) + '\n');
+  assert.equal(run().percent, 0);
+  // the user switched the Automation to the Coding Plan: that pool no longer applies
+  fs.appendFileSync(file, provider('2026-11-18 01:25:00.000', 'zai-individual-coding-plan'));
+  const coding = run();
+  assert.equal(coding.percent, null);
+  assert.equal(coding.plan, 'individual-coding-plan');
+  // and back to the Start Plan: its balance counts again
+  fs.appendFileSync(file, provider('2026-11-18 01:30:00.000', 'zai-start-plan'));
+  assert.equal(run().percent, 0);
+});
+
 test('balance treats a pool past its expiry as 0% left', () => {
   const logs = fs.mkdtempSync(path.join(os.tmpdir(), 'zq-logs-'));
   const entry = (time, expires) =>

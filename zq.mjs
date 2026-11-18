@@ -490,6 +490,14 @@ function readBalance() {
   // newest use of the Individual Coding Plan, whose balance the app does not log
   const codingLine = logs.flat().find((l) => l.includes('"providerId":"account:zai-individual-coding-plan"'));
   const codingAt = codingLine?.match(/^\[([0-9-]+ [0-9:]+)/)?.[1] ?? null;
+  const startLine = logs.flat().find((l) => l.includes('"providerId":"account:zai-start-plan"'));
+  const startAt = startLine?.match(/^\[([0-9-]+ [0-9:]+)/)?.[1] ?? null;
+  const ms = (t) => Date.parse(t.replace(' ', 'T'));
+  // The app moved to the Coding Plan after its last Start Plan use: the Start Plan balance no
+  // longer applies, even while that pool is still listed (an empty pool before its end date).
+  if (codingAt && (!startAt || ms(codingAt) > ms(startAt))) {
+    return { at: codingAt, remaining: null, total: null, percent: null, plans: [], plan: 'individual-coding-plan' };
+  }
   for (const lines of logs) {
     for (const line of lines) {
       if (!line.includes('billing/balance') || !line.includes('{')) continue;
@@ -508,7 +516,6 @@ function readBalance() {
         // app has used the Individual Coding Plan since; its balance is not logged (unknown).
         if (!bal.length) {
           // within the hour, either way round: the app checks the balance between Coding Plan sessions
-          const ms = (t) => Date.parse(t.replace(' ', 'T'));
           if (codingAt && at && ms(codingAt) >= ms(at) - 3_600_000) {
             return { at: codingAt, remaining: null, total: null, percent: null, plans: [], plan: 'individual-coding-plan' };
           }

@@ -146,7 +146,8 @@ The balance is the Start Plan's. When it has ended, the app logs an empty balanc
 `zq balance` reports 0%. A pool past its expiry also counts as 0%, even when the last
 logged balance still lists tokens in it. When the app has used the Individual Coding Plan since, it
 reports `unknown` (`"percent": null`, `"plan": "individual-coding-plan"`): the app
-does not log that plan's balance.
+does not log that plan's balance. The same holds while a used-up pool is still listed: once the
+app's newest model call went to the Coding Plan, that pool no longer counts.
 
 ## Costs and limits
 
