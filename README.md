@@ -165,6 +165,14 @@ newest model call went to the Coding Plan, a listed pool no longer counts.
 node --test
 ```
 
+## Code review by Greptile
+
+Greptile reviews a pull request only when it is asked: write a comment on the pull request
+that says `@greptileai` (a focus may follow, for example "`@greptileai` check the migration").
+It does not review by itself: `greptile.json` sets `"autoReview": []`, and a repository's file
+wins over the setting in Greptile's dashboard. Ask for a review when a pull request is big,
+complex or critical; a small one does not need it.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
